@@ -12,6 +12,7 @@ import { RunnableValidationChains } from 'express-validator/src/middlewares/sche
 // biết của con chat gòi, nên là mình sẽ dô cái file đo coi đường dẫn
 
 import { NextFunction, Request, Response } from 'express'
+import { EnityError, ErrorWithStatus } from '~/models/Errors'
 //RunnableValidationChains<ValidationChain>: cái này lấy ở cái Schema(ctrl bấm hàm)
 /*
     RunnableValidationChains này không phải là mảng (validate chain) 
@@ -35,7 +36,42 @@ export const validate = (validation: RunnableValidationChains<ValidationChain>) 
     if (errors.isEmpty()) {
       return next()
     }
+    /*Do cái lỗi của mình taoj ra bình thường thì mà có lỗi thì nó, sẽ hiện lỗi
+      chung với mấy thằng kia, mà mình muốn nó hiện lỗi của riêng nó, nên mình
+      tạo 1 cái obj lỗi ở đây có gì tí nữa mình quay lại custome nó là được  
+    */
+    // tí nữa mình xửa lý
+    const errorObject = errors.mapped()
+    //mình không cần phải thêm status vì mình đã có gòi
+    // cái mình thiếu bây giờ là bên trong eror
+    const enityError = new EnityError({ errors: {} })
+    //---- dùng để xử lý lỗi khác 422
+    // Xử lý errObject
+    // đi qua từng key để lấy msg
+    // nếu thằng nào giống lỗi thì tạo cái lỗi
+    // rồi quằng ra
+    for (const key in errorObject) {
+      // lấy msg của từng cái lỗi
+      const { msg } = errorObject[key]
+      //------------------
+      //const { msg } = errorObject.key ** là sai nghe, làm déo gì có thuộc tính này
+      // nêu là default
+      //---------------------------
+      // nếu msg có dạng ErrorWithStatus và status !== 422 thì ném ra
+      // cho default error Handler(error tổng)
+      if (msg instanceof ErrorWithStatus && msg.status !== 422) {
+        return next(msg)
+      }
+      // lỗi các lỗi 422 từ errObjectt vào enityError
+      // mình sẽ lấy cái key tương ưngs của thằng bên kia về làm key cho
+      // minh nhưng mà thay vì lưu hêts thôgn tin thì nó chỉ lưu msg
+      enityError.errors[key] = msg // nếu thấy khó hiểu nhìn hình trong notion hoặc xem lại video buổi 29
+    }
+
+    ///-------------------------
+    // ở đây nó xử lý lỗi lưu chứ không ném về error handler tổng
     //                      mapped giúp biến đổi đẹp hơn, có tên lỗi
-    res.status(400).json({ errors: errors.mapped() })
+    next(enityError) // do lúc này mình đã có lỗi rõ ràng nên là
+    // lỗi này sẽ được đưa về error tổng
   }
 }

@@ -1,6 +1,8 @@
-import express from 'express'
+import express, { NextFunction, Request, Response } from 'express'
 import usersRouter from './routes/users.routes'
 import databaseService from './services/database.services'
+import { defaultErrorHandler } from './middlewares/error.middlewares'
+
 const app = express()
 
 const PORT = 3000
@@ -23,6 +25,16 @@ app.get('/', (req, res) => {
 //  localhost:3000/api/tweets thì dô được
 app.use('/users', usersRouter) // thằng này là controller: gửi về dữ liệu nè
 // nên mình mới cần thêm middleware, khi mà truy cập
+
+/*
+  Tại sao lại có thằng xử lý lỗi ở đây (App Tổng )
+    - 1: bởi vì nếu đặt ở chỗ routers á 
+        -- Không lẻ bây giờ có 100 cái router thì 100 cais error nư này sao
+      - Vậy nên nên đặt ở app tổng ở cuối app, khi mà chạy á thì lỗi nó sẽ được dồn 
+      về cuối thì dễ dàng sửa hơn,nếu mà có lỗi thì nó ném phát dìa đây, OKK
+ */
+
+app.use(defaultErrorHandler)
 
 app.listen(PORT, () => {
   console.log(`Server đàng  chạy trên ${PORT}`)

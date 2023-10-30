@@ -16,64 +16,122 @@ nếu mà import thì mình sẽ sử dụng của expresss, thì express nó
 */
 import { Request, Response, NextFunction } from 'express'
 import { checkSchema } from 'express-validator'
+import { USERS_MESSAGES } from '~/constants/messages'
+import { ErrorWithStatus } from '~/models/Errors'
+import databaseService from '~/services/database.services'
 import usersService from '~/services/users.services'
+import { hashPassword } from '~/utils/crypto'
 import { validate } from '~/utils/validation'
 
-export const loginValidator = (req: Request, res: Response, next: NextFunction) => {
-  //khi mà người đùng đăng nhập thì
-  // họ sẽ gửi chúng ta cái request
-  // trong cái requrest (body) nó có email và password
-  // nên mình dùng distructuring để lấy được những thuộc tính này
-  const { email, password } = req.body
-  if (!email || !password) {
-    return res.status(400).json({
-      // phản hồi về 1 Json chúa thuộc tính err: và nội dung
-      error: 'Missing email or password'
-    })
-  }
-  next()
-}
+// khi nguời ta đăng nhập
+// người ta đưa mình cái email và pwd
+// mình 2 cái đó mình check
+export const loginValidator = validate(
+  checkSchema({
+    email: {
+      isEmail: {
+        errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
+      },
+      trim: true,
+      custom: {
+        options: async (value, { req }) => {
+          // tìm nè tìm trong db
+          const user = await databaseService.users.findOne({
+            email: value,
+            password: hashPassword(req.body.password)
+          })
+          // nếu user không có trong database thì quăng lỗi
+          if (user === null) {
+            throw new Error(USERS_MESSAGES.EMAIL_OR_PASSWORD_IS_INCORRECT)
+          }
+          // req.user này là hosting  nên là thằng user này là gán nhờ
+          // anh anh cho em gửi nhờ
+          req.user = user // lưu user vào req để dùng ở loginController
+          return true
+        }
+      }
+    },
 
+    password: {
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
+      },
+      isString: {
+        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
+      },
+      isLength: {
+        options: {
+          min: 8,
+          max: 50
+        },
+        errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
+      },
+      isStrongPassword: {
+        options: {
+          minLength: 8,
+          minLowercase: 1,
+          minUppercase: 1,
+          minNumbers: 1,
+          minSymbols: 1
+        },
+        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
+      }
+    }
+  })
+)
+//-----------------------------------------------
 // bản thân thằng này là cái middwware
 // checkSchema có trong ExpressValidation
 export const resgisterValidator = validate(
   checkSchema({
     name: {
-      notEmpty: true, // không đc empty
-      isString: true, // chuỗi nha không được số
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.NAME_IS_REQUIRED
+      }, // không đc empty
+      isString: {
+        errorMessage: USERS_MESSAGES.NAME_MUST_BE_A_STRING
+      }, // chuỗi nha không được số
       trim: true,
       isLength: {
         options: {
           min: 1,
           max: 100
-        }
+        },
+        errorMessage: USERS_MESSAGES.NAME_LENGTH_MUST_BE_FROM_1_TO_100
       }
     },
     email: {
-      notEmpty: true, // không đc empty
-      isEmail: true, //  kiểm tra chuẩn Email, do kiểm tra chuẩn Email, trong đó nó có length gòi
-
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.EMAIL_IS_REQUIRED
+      },
+      isEmail: {
+        errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
+      },
       trim: true,
       custom: {
-        options: async (value, { req }) => {
-          // bên kia trả ra nè
-          const isExist = await usersService.checkEmail(value)
-          if (isExist) {
-            throw new Error('Email already exists')
+        options: async (value) => {
+          const isExistEmail = await usersService.checkEmailExist(value)
+          if (isExistEmail) {
+            throw new Error(USERS_MESSAGES.EMAIL_ALREADY_EXISTS)
           }
-          return true // đéo có pedding chết mẹ luôn
+          return true
         }
       }
     },
     password: {
-      notEmpty: true, // không đc empty
-      isString: true, // chuỗi nha không được số
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
+      }, // không đc empty
+      isString: {
+        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
+      }, // chuỗi nha không được số
       // trim: false, // không được trim nha 3, password người ta nhập gì kện mẹ ngta
       isLength: {
         options: {
           min: 8,
           max: 50
-        }
+        },
+        errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
       },
       // cái này dùng để đánh giá password của người ta
       //là mạnh ha không mạnh
@@ -86,20 +144,25 @@ export const resgisterValidator = validate(
           minSymbols: 1
           // returnScore:true : nếu để là true thì nó sẽ hiện sôs trên thang 1-10
           //                   còn là false thì sẽ là true false
-        }
-      },
-      errorMessage:
-        'password mus be at least 8 characters long and contain at least 1 lowercase letter, 1 uppercase letter, 1 number, and 1 symbol'
+        },
+        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
+      }
     },
+    //-----------------------------
     confirm_password: {
-      notEmpty: true, // không đc empty
-      isString: true, // chuỗi nha không được số
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_IS_REQUIRED
+      }, // không đc empty
+      isString: {
+        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_A_STRING
+      }, // chuỗi nha không được số
       // trim: false, // không được trim nha 3, password người ta nhập gì kện mẹ ngta
       isLength: {
         options: {
           min: 8,
           max: 50
-        }
+        },
+        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
       },
       // cái này dùng để đánh giá password của người ta
       //là mạnh ha không mạnh
@@ -112,19 +175,17 @@ export const resgisterValidator = validate(
           minSymbols: 1
           // returnScore:true : nếu để là true thì nó sẽ hiện sôs trên thang 1-10
           //                   còn là false thì sẽ là true false
-        }
+        },
+        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_STRONG
       },
-      errorMessage:
-        'confrim_password mus be at least 8 characters long and contain at least 1 lowercase letter, 1 uppercase letter, 1 number, and 1 symbol',
       custom: {
         // value với req  này là gì?
         // value này là confirm passWord đó
         // do nó nằm trong trường đó mà
         //Req: là cái yêu cầu ma người dùng đưa đó
         options: (value, { req }) => {
-          if (value !== req.body.passWord) {
-            throw new Error('confirm_passwword does not matchpasword') //
-            // throw ra để cho trường bắt lỗi bên validation nó in ra
+          if (value !== req.body.password) {
+            throw new Error(USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_THE_SAME_AS_PASSWORD) // throw ra để cho trường bắt lỗi bên validation nó in ra
           }
           return true // không có thằng này thì pendding tới chết
         }
@@ -136,7 +197,8 @@ export const resgisterValidator = validate(
         options: {
           strict: true, // ép ngta nhập theo chuẩn chuỗi
           strictSeparator: true // chuỗi được quyền thêm gạch ngnag
-        }
+        },
+        errorMessage: USERS_MESSAGES.DATE_OF_BIRTH_BE_ISO8601
       }
     }
   })

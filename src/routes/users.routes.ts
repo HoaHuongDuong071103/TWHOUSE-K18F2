@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { loginControler, resgisterController } from '~/controllers/users.controllers'
 import { loginValidator, resgisterValidator } from '~/middlewares/user.middlewares'
+import { wrapAsync } from '~/utils/handlers'
 const usersRouter = Router() // lưu hết tất cả các tính năngb liên quan đến user
 // thằng naỳ là middleware(midlewware thì có 3 cái)
 
@@ -13,7 +14,13 @@ const usersRouter = Router() // lưu hết tất cả các tính năngb liên qu
 // này thì bên trong cái req mà người đùng đưa lên (đã giải thícj ở middleware)
 // thì nó sẽ cầm cái req đó check coi có Oke hong, Oke thì cho lấy dữ liệu
 // ngon thì dô thằng loginControler
-usersRouter.get('/login', loginValidator, loginControler)
+/*
+des: đăng nhập
+path: /users/register
+method: POST
+body: {email, password}
+*/
+usersRouter.get('/login', loginValidator, wrapAsync(loginControler))
 
 // đây là cái mà mấy lập trình viên hay sài để cho ngươi ta viết mình viết
 // cái gì
@@ -39,6 +46,8 @@ usersRouter.get('/login', loginValidator, loginControler)
     }
 */
 // register dùng để
-usersRouter.post('/register', resgisterValidator, resgisterController)
+usersRouter.post('/register', resgisterValidator, wrapAsync(resgisterController))
+
+resgisterController
 
 export default usersRouter

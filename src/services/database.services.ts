@@ -5,6 +5,7 @@ import { MongoClient, ServerApiVersion, Db, Collection } from 'mongodb'
 // kh đẩy env lên do nó là file chứa password đây lên hacker lấy đc là đi
 import { config } from 'dotenv' // sử dụng lại 2 cái biến đó nè
 import User from '~/models/schemas/User.schema copy'
+import RefreshToken from '~/models/schemas/RefreshToken.schema'
 
 config()
 // taij sao lại có 2 biến do là mình đã để nó ở 1 nơi khác tăng tính bảo mật
@@ -13,7 +14,7 @@ const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}
 // tạo sao lại có class chỗ này?
 // để cho nó dễ dàng trong việc gọi hàm thoi
 // tại sao không nên export cái class này
-// do là khi mà export mà có ai đó muốn sử dụng thì phải tạo obj
+// do là khi mà export class mà có ai đó muốn sử dụng thì phải tạo obj
 // từ cái class này mất công nên là mình tạo giúp ngta xong export lun
 
 class DatabaseService {
@@ -39,8 +40,13 @@ class DatabaseService {
     }
   }
 
+  //--------------------------
   // asscessor:properti: nên nó hiểu đây là cái thuộc tính luôn()
-
+  //--------------
+  // nói tóm gọn lại là nếu mà mình truy cập dô thằng users này á
+  // mà nếu mình có gòi thì nó sẽ cầm thằng collecion này nó đưa cho mình
+  // còn chưa thì nó tạo
+  //---------------------
   // trong cái collection nó là document nên không có sử dụng được những thuộc tính
   // nên là mình phải định nghĩa cho Collection hiểu nó là User (mới sử dụng được những thuộc tính của
   //obj này)
@@ -49,6 +55,10 @@ class DatabaseService {
     // nên chỉ có mình biết thôi (mìnhf tạo mà trong interface) nên là
     // mình nói cho code hiểu là đay là String yên tâm sử dụng đê
     return this.db.collection(process.env.DB_USERS_COLLECTION as string) // truy cập dô thằng cái collection trong db nè
+  }
+
+  get refreshTokens(): Collection<RefreshToken> {
+    return this.db.collection(process.env.DB_REFRESH_TOKEN_COLLECTION as string) // truy cập dô thằng cái collection trong db nè
   }
 }
 
