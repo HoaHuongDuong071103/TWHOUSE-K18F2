@@ -1,6 +1,17 @@
 import { Router } from 'express'
-import { loginControler, resgisterController } from '~/controllers/users.controllers'
-import { loginValidator, resgisterValidator } from '~/middlewares/user.middlewares'
+import {
+  emailVerifyTokenController,
+  loginControler,
+  logoutController,
+  resgisterController
+} from '~/controllers/users.controllers'
+import {
+  accessTokenValidator,
+  emailVerifyTokenValidator,
+  loginValidator,
+  refreshTokenValidator,
+  resgisterValidator
+} from '~/middlewares/user.middlewares'
 import { wrapAsync } from '~/utils/handlers'
 const usersRouter = Router() // lưu hết tất cả các tính năngb liên quan đến user
 // thằng naỳ là middleware(midlewware thì có 3 cái)
@@ -48,6 +59,37 @@ usersRouter.get('/login', loginValidator, wrapAsync(loginControler))
 // register dùng để
 usersRouter.post('/register', resgisterValidator, wrapAsync(resgisterController))
 
-resgisterController
+//------------------------------------------------------------
+/*
+    des:đăng xuất
+    path: /users/logout
+    method:POST
+    headers:{Authoriation:'Bear<access_token>'}
+    body:{refresh_token:string}
+
+*/
+
+// logut nè
+usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, wrapAsync(logoutController))
+
+//-----------------------------------------
+// email
+/*
+    des: verify email token
+    khi người dùng đk họ sẽ nhận được mail có link dạng
+    http://localhost:3000/users/verify-email?token=</email_verify_token>
+    nếu mà em nhấp vào click thì sẽ tạo ra request  gửi email_verify_token  lên server
+    Server kiểm tra cái email_verifyu_token có hợp lệ ha không
+    thì từ cái decode _email_verify lấy user_id
+    và vào user_id đó để update email_verify_token thành '' , verify = 1, update_at ngày hiện taij 
+    path: /users/verify-email
+    method:Post
+    body: {emai_verify_token:string}
+    
+ 
+    */
+
+// tại sao là post, là mình gửi lên chứ mình có nhận được gì đâu
+usersRouter.post('/verify-email', emailVerifyTokenValidator, wrapAsync(emailVerifyTokenController))
 
 export default usersRouter

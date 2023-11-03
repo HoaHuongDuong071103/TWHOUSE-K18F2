@@ -30,5 +30,13 @@ export const USERS_MESSAGES = {
   //user
   EMAIL_OR_PASSWORD_IS_INCORRECT: 'Email or password is incorrect',
   LOGIN_SUCCESS: 'Login success',
-  REGISTER_SUCCESS: 'Register success'
+  REGISTER_SUCCESS: 'Register success',
+  ACCESS_TOKEN_IS_REQUIRED: 'Access token is required',
+  REFRESH_TOKEN_IS_REQUIRED: 'Refresh token is requied',
+  USED_REFRESH_TOKEN_OR_NOT_EXIST: 'Used refresh token or not exist',
+  LOGOUT_SUCCESS: 'Logout success',
+  EMAIL_VERIFY_TOKEN_IS_REQUIRED: 'Email verify token required',
+  USER_NOT_FOUND: 'User not found',
+  EMAIL_ALREADY_VERIFY_BEFORE: 'Email already verify before',
+  VERIFY_EMAIL_SUCCESS: 'Verify email success'
 } as const //để k ai chỉnh đc
