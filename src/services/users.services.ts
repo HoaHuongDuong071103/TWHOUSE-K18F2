@@ -40,6 +40,15 @@ class UsersService {
     })
   }
 
+  // hàm sign Email_verify_Token
+  private signForgotPassWordToken(user_id: string) {
+    return signToken({
+      payload: { user_id, token_type: TokenType.ForgotPasswordToken },
+      options: { expiresIn: process.env.FORGOT_PASSWORD_TOKEN_EXPIRE_IN },
+      privateKey: process.env.JWT_SECRET_FORGOT_PASSWORD_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
+    })
+  }
+
   // ký acess_token và refresh token
   private signAcessAndRefreshToken(user_id: string) {
     return Promise.all([this.signAcessToken(user_id), this.signRefreshToken(user_id)])
@@ -55,6 +64,7 @@ class UsersService {
   //-----------------------------------------
   // đây là nơi đăng kí nè
   // payload là cái gói mà người dùng ném ra cho mình
+  // payLoad là nơi mà lưu trữ  thông tin của  người dùng đưa lên đồ đó
   async register(payload: resgisterReqBody) {
     // tại sao lại phải tạo trước user_id,trong khi mà Monggo sẽ cung cấp mã này cho mình?
     /*
@@ -147,7 +157,7 @@ class UsersService {
     return { message: USERS_MESSAGES.LOGOUT_SUCCESS }
   }
 
-  //------------Update lại user-------------------------------------
+  //------------Update lại user (Buổi 30)-------------------------------------
   async verifyEmail(user_id: string) {
     await databaseService.users.updateOne(
       // viết kiểu này là dùng cái id đầu vào tạo đối tượng
@@ -179,6 +189,50 @@ class UsersService {
       })
     )
     return { access_token, refresh_token }
+  }
+  //--- Resend Email (Buổi 30)----------------------
+  async resendEmailVerify(user_id: string) {
+    // tạo ra email_verify_token
+    const email_verify_token = await this.signEmailVerifyToken(user_id)
+    // update lại user
+    await databaseService.users.updateOne(
+      { _id: new ObjectId(user_id) },
+
+      [
+        {
+          $set: {
+            email_verify_token,
+            //  update_at: new Date() ** viết update kiểu này, có thể đúng, nhưng có thể bị chêch lệch thời gian khi
+            // đưa dữ liệu lên server
+            // Vậy nên mình phải bộc cái đối tượng này vào mảng, và có cú pháp lấy giờ chuẩn để tránh sai lệch
+            update_at: '$$NOW' // viết kiểu này thì khi mà đưa lên MG á, thì MG sẽ tự động cập nhật tg lun, tránh bị sai lệch
+          }
+        }
+      ]
+    )
+    // giả sử gửi lại email
+    console.log(email_verify_token)
+    return { message: USERS_MESSAGES.RESEND_EMAIL_VERIFY_SUCCESS }
+  }
+  //---------------Lưu forgotPassWord vào db nè (buỏi 30)-------------
+  async forgotPassword(user_id: string) {
+    // tạo ra forgot_password_token
+    const forgot_password_token = await this.signForgotPassWordToken(user_id)
+    // update lại user
+    await databaseService.users.updateOne({ _id: new ObjectId(user_id) }, [
+      {
+        $set: {
+          forgot_password_token,
+          //  update_at: new Date() ** viết update kiểu này, có thể đúng, nhưng có thể bị chêch lệch thời gian khi
+          // đưa dữ liệu lên server
+          // Vậy nên mình phải bộc cái đối tượng này vào mảng, và có cú pháp lấy giờ chuẩn để tránh sai lệch
+          update_at: '$$NOW' // viết kiểu này thì khi mà đưa lên MG á, thì MG sẽ tự động cập nhật tg lun, tránh bị sai lệch
+        }
+      }
+    ])
+    // giả lập gửi email
+    console.log(forgot_password_token)
+    return { message: USERS_MESSAGES.CHECK_EMAIL_TO_RESET_PASSWORD }
   }
 }
 

@@ -1,16 +1,21 @@
 import { Router } from 'express'
 import {
   emailVerifyTokenController,
+  forgotPasswordController,
   loginControler,
   logoutController,
-  resgisterController
+  resendEmailVerifyController,
+  resgisterController,
+  verifyForgotPasswordTokenController
 } from '~/controllers/users.controllers'
 import {
   accessTokenValidator,
   emailVerifyTokenValidator,
+  forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
-  resgisterValidator
+  resgisterValidator,
+  verifyForgotPasswordTokenValidator
 } from '~/middlewares/user.middlewares'
 import { wrapAsync } from '~/utils/handlers'
 const usersRouter = Router() // lưu hết tất cả các tính năngb liên quan đến user
@@ -92,4 +97,50 @@ usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, wrapAsy
 // tại sao là post, là mình gửi lên chứ mình có nhận được gì đâu
 usersRouter.post('/verify-email', emailVerifyTokenValidator, wrapAsync(emailVerifyTokenController))
 
+//------------------------------------------
+// Forgot PassWord
+// Bình thường là sẽ có 2 cách
+// Đăng nhập trước gòi verify sau
+// ngược lại
+
+/*
+      des: resend email verify token 
+      khi mà mail  thất lạc, hoặc email_verify_token hết hạn, thì 
+      người dùng có nhu cầu resend email_verify_token
+
+     method: post (Tại sao là post do là mình đâu có gửi cho họ đâu, mình gưi cho email của họ mà)
+     path:/users/resend-email-verify
+      headers:  (tại sao là headers do là mình truyền acess mà)
+      headers: {Authorization : "Bearer <access_token>"} // đăng nhập mới được resend
+      body{}
+*/
+usersRouter.post('/resend-verify-email', accessTokenValidator, wrapAsync(resendEmailVerifyController))
+
+///-----------------------ForGot PAssword
+/*
+    Des: khi ngưởi dungf quên mk, họ sẽ gửi cái email để xin mình tạo cái 
+    forgot_password_token
+    path:/users/forgot-password
+    method: POST
+    // body;{email;string }
+
+*/
+usersRouter.post('/forgot-password', forgotPasswordValidator, wrapAsync(forgotPasswordController))
+
+/*
+    des: khi người dùng nhấp vào link trong email để reset Password
+     họ sẽ gửi 1 req kèm theo forgot_passWord_token lên server
+     server sẽ kiểm tra forgot_passWord_token có hợp lệ không 
+
+    sau đó chuyển hướng họ đến trang reset password
+    path:/users/verify-forgot-password
+    method: POSR
+    body:{forgot_password_token:string}
+*/
+
+usersRouter.post(
+  '/verify-forgot-password',
+  verifyForgotPasswordTokenValidator,
+  wrapAsync(verifyForgotPasswordTokenController)
+)
 export default usersRouter
