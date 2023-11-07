@@ -1,4 +1,4 @@
-import { resgisterReqBody } from '~/models/requests/user.request'
+import { UpdateMeReqBody, resgisterReqBody } from '~/models/requests/user.request'
 import databaseService from './database.services'
 import User from '~/models/schemas/User.schema copy'
 import { hashPassword } from '~/utils/crypto'
@@ -8,50 +8,58 @@ import usersRouter from '~/routes/users.routes'
 import RefreshToken from '~/models/schemas/RefreshToken.schema'
 import { ObjectId } from 'mongodb'
 import { USERS_MESSAGES } from '~/constants/messages'
+import { ErrorWithStatus } from '~/models/Errors'
+import HTTP_STATUS from '~/constants/httpStatus'
 //Service
 //Database: là vùng để kết nối với nhau chứ không dùng để xử lý,
 //vậy nên mới cần cái thằng Service truy xuất dữ liệu  Controller sẽ
+
+//--------------------------------------------------------
+//Muốn sử dụng chức năng cập nhật (location, address....) thì mình phải xác nhận là người dùng
+// đã verify chưa, nếu chưa thì bắt buộc phải verify thì mới cập nhật
+// dùng cách này là ký xong gửi lun, khỏi phải query thì nó lâu
 class UsersService {
   // ký asscess và Refresh Token
   // hàm nhận vào user_id và bỏ vào payLoad để tạo accessToken
-  private signAcessToken(user_id: string) {
+  private signAcessToken({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     return signToken({
-      payload: { user_id, token_type: TokenType.AccessToken },
+      payload: { user_id, token_type: TokenType.AccessToken, verify },
       options: { expiresIn: process.env.ACCESS_TOKEN_EXPIRE_IN },
       privateKey: process.env.JWT_SECRET_ACCESS_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
       // sau đó thằng signToken  chỉnh sửa thành bắt buộc nên giờ phải truyền
     })
   }
   // hàm nhận vào user_id và bỏ vào payLoad để tạo RefreshToken
-  private signRefreshToken(user_id: string) {
+  private signRefreshToken({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     return signToken({
-      payload: { user_id, token_type: TokenType.RefreshToken },
+      payload: { user_id, token_type: TokenType.RefreshToken, verify },
       options: { expiresIn: process.env.REFRESH_TOKEN_EXPIRE_IN },
       privateKey: process.env.JWT_SECRET_REFRESH_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
     })
   }
 
   // hàm sign Email_verify_Token
-  private signEmailVerifyToken(user_id: string) {
+  private signEmailVerifyToken({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     return signToken({
-      payload: { user_id, token_type: TokenType.EmailVerificationToken },
+      payload: { user_id, token_type: TokenType.EmailVerificationToken, verify },
       options: { expiresIn: process.env.EMAIL_VERIFY_TOKEN_EXPIRE_IN },
       privateKey: process.env.JWT_SECRET_EMAIL_VERIFY_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
     })
   }
 
   // hàm sign Email_verify_Token
-  private signForgotPassWordToken(user_id: string) {
+  private signForgotPassWordToken({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     return signToken({
-      payload: { user_id, token_type: TokenType.ForgotPasswordToken },
+      payload: { user_id, token_type: TokenType.ForgotPasswordToken, verify },
       options: { expiresIn: process.env.FORGOT_PASSWORD_TOKEN_EXPIRE_IN },
       privateKey: process.env.JWT_SECRET_FORGOT_PASSWORD_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
     })
   }
 
   // ký acess_token và refresh token
-  private signAcessAndRefreshToken(user_id: string) {
-    return Promise.all([this.signAcessToken(user_id), this.signRefreshToken(user_id)])
+  private signAcessAndRefreshToken({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
+    //                                    chỗ này nhận vào obj nè                      đây cũng thế
+    return Promise.all([this.signAcessToken({ user_id, verify }), this.signRefreshToken({ user_id, verify })])
   }
   //----------------------------------------------------------
   // checkEmail có tồn tại chưa
@@ -82,7 +90,10 @@ class UsersService {
     
     */
     const user_id = new ObjectId() // đây là đối tuognjw nha
-    const email_verify_token = await this.signEmailVerifyToken(user_id.toString())
+    const email_verify_token = await this.signEmailVerifyToken({
+      user_id: user_id.toString(),
+      verify: UserVerifyStatus.Unverified // tại sao là 0 bởi vì khi kí là chưa có nên mình mạnh dạng cho nó là 0
+    })
     // phân rả nó ra gòi sài
 
     // code này có nghĩa là đợi serve vào thư mục người dùng và insert
@@ -93,6 +104,8 @@ class UsersService {
         ...payload,
         _id: user_id, // trên MG nó là _id
         email_verify_token,
+        // lấy user kết hợp của user_id
+        username: `user${user_id.toString()}`,
         // cái người dung đưa mình là String
         // nên mình mới ép kiểu lại thành date xong quăng lên
         date_of_birth: new Date(payload.date_of_brith),
@@ -112,7 +125,10 @@ class UsersService {
     // promise.All trả về cho mình 1 cái mảng
     // khi mà phân ra mảng thì dùng []
     //   ___________OBJ thì {}
-    const [access_token, refresh_token] = await this.signAcessAndRefreshToken(user_id.toString())
+    const [access_token, refresh_token] = await this.signAcessAndRefreshToken({
+      user_id: user_id.toString(),
+      verify: UserVerifyStatus.Unverified // chôx này cũng z ljun
+    })
     // ---------------------------------------------------
     // kí xong thì lưu lại trong db để bảo mật nè
     // nhớ là chỉ lưu Refresh
@@ -134,10 +150,18 @@ class UsersService {
     // mình trả cho người dùng obj
     return { access_token, refresh_token }
   }
+
   //---------------------LOGIN----------------------------------------
-  async login(user_id: string) {
+  // tại sao lại nhận giá trị ngoài(buổi 31 1h45p)
+  /*
+      Vì trước hết á, đăng nhập thì đâu có biết là đã verify ha chưa đâu
+      _ không verify thì vẫn đăng nhập được mà
+      _ nên chỗ này mình không fill giá trị đại được
+      _ nên mình phải nhận nó từ bên ngoài  
+  */
+  async login({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     // dùng user_id tạo access và refresh
-    const [access_token, refresh_token] = await this.signAcessAndRefreshToken(user_id)
+    const [access_token, refresh_token] = await this.signAcessAndRefreshToken({ user_id, verify })
 
     // lưu refresh_token và db
     await databaseService.refreshTokens.insertOne(
@@ -177,7 +201,11 @@ class UsersService {
       ]
     )
     // tạo ra access và RefreshToken nè
-    const [access_token, refresh_token] = await this.signAcessAndRefreshToken(user_id)
+    const [access_token, refresh_token] = await this.signAcessAndRefreshToken({
+      user_id,
+      verify: UserVerifyStatus.Verified // tại sao lại là verify laf bởi vì đây là cái hàm
+      //                chuyển từ unverfied sang verify nên chỗ này phải là verify
+    })
     // lưu refresh vào db
     // tại vì cái collection của refreshTokens này chỉ có 2 thuộc tính à
     // token và người xở hữu
@@ -192,8 +220,9 @@ class UsersService {
   }
   //--- Resend Email (Buổi 30)----------------------
   async resendEmailVerify(user_id: string) {
-    // tạo ra email_verify_token
-    const email_verify_token = await this.signEmailVerifyToken(user_id)
+    // tạo ra email_verify_token                                           Tại sao lại là 0
+    //                                                                vì resend là chưa kí
+    const email_verify_token = await this.signEmailVerifyToken({ user_id, verify: UserVerifyStatus.Unverified })
     // update lại user
     await databaseService.users.updateOne(
       { _id: new ObjectId(user_id) },
@@ -215,9 +244,12 @@ class UsersService {
     return { message: USERS_MESSAGES.RESEND_EMAIL_VERIFY_SUCCESS }
   }
   //---------------Lưu forgotPassWord vào db nè (buỏi 30)-------------
-  async forgotPassword(user_id: string) {
+  // cái forgot password này không biết là đã verify chưa
+  // Ví dụ nè: thằng verify gòi nó cũng quên , thằng chưa verify nó cũng quên
+  // nên là không có đoán mò , tốt nhất vẫn là nhận giá trị đầu vào (Buổi 31(video chữa tắt tiếng(23:30)))
+  async forgotPassword({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     // tạo ra forgot_password_token
-    const forgot_password_token = await this.signForgotPassWordToken(user_id)
+    const forgot_password_token = await this.signForgotPassWordToken({ user_id, verify })
     // update lại user
     await databaseService.users.updateOne({ _id: new ObjectId(user_id) }, [
       {
@@ -233,6 +265,93 @@ class UsersService {
     // giả lập gửi email
     console.log(forgot_password_token)
     return { message: USERS_MESSAGES.CHECK_EMAIL_TO_RESET_PASSWORD }
+  }
+  //----------------- Reset password(Buổi 31)
+  async resetPassword({ user_id, password }: { user_id: string; password: string }) {
+    // tiến hành tìm dựa vào user_id và update
+    // có nghĩa là nó đi tìm thằng có mã _id(object )
+    await databaseService.users.updateOne({ _id: new ObjectId(user_id) }, [
+      {
+        $set: {
+          password: hashPassword(password), // này là cập nhật mật khẩu nè
+          forgot_password_token: '', // set về rỗng nè, sau khi set thành rỗng
+          //              thì nó không thể sử dụng forgot password 2 lần chỉ 1 lần
+          updated_at: '$$NOW'
+        }
+      }
+    ])
+    return { message: USERS_MESSAGES.RESET_PASSWORD_SUCCESS }
+  }
+  //------------------- GetMe(buổi 31)
+  async getMe(user_id: string) {
+    const user = await databaseService.users.findOne(
+      { _id: new ObjectId(user_id) },
+      {
+        // cho mình nào được và thằng nào được hiển thị ra
+
+        // 0 là kh hiện được
+        projection: {
+          password: 0,
+          email: 0,
+          forgot_password_token: 0
+        }
+      }
+    )
+    return user
+  }
+  //--------------------
+  async updateMe(user_id: string, payload: UpdateMeReqBody) {
+    // đọc code nè payLoad nè có DOB không
+    // Date_of_Brith đó có thay đổi không
+    // có thì phải ép kiểu nó thành dạnh date từ cái payLoad có cái thuộc tính cũ
+    // không thhì llaays giá trị của payLoad đó
+    const _payload = payload.date_of_birth ? { ...payload, date_of_birth: new Date(payload.date_of_birth) } : payload
+    // cập nhật lên db nè
+    const user = await databaseService.users.findOneAndUpdate(
+      { _id: new ObjectId(user_id) },
+      [
+        {
+          $set: {
+            ..._payload,
+            updated_at: '$$NOW'
+          }
+        }
+      ],
+      {
+        returnDocument: 'after', //trả về document sau khi update, nếu k thì nó trả về document cũ
+        projection: {
+          //chặn các property k cần thiết
+          password: 0,
+          email_verify_token: 0,
+          forgot_password_token: 0
+        }
+      }
+    )
+    return user //đây là document sau khi update
+  }
+
+  async getProfile(username: string) {
+    const user = await databaseService.users.findOne(
+      { username },
+      {
+        projection: {
+          password: 0,
+          email_verify_token: 0,
+          forgot_password_token: 0,
+          verify: 0,
+          create_at: 0,
+          update_at: 0
+        }
+      }
+    )
+    if (user == null) {
+      throw new ErrorWithStatus({
+        message: USERS_MESSAGES.USER_NOT_FOUND,
+        status: HTTP_STATUS.NOT_FOUND
+      })
+    }
+    // nếu kh vào if thì nó ngonn return ra cho sài
+    return user
   }
 }
 

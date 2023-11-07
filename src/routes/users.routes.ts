@@ -2,21 +2,30 @@ import { Router } from 'express'
 import {
   emailVerifyTokenController,
   forgotPasswordController,
+  getMeController,
+  getProfileController,
   loginControler,
   logoutController,
   resendEmailVerifyController,
+  resetPasswordController,
   resgisterController,
+  updateMeController,
   verifyForgotPasswordTokenController
 } from '~/controllers/users.controllers'
+import { filterMiddleware } from '~/middlewares/common.middlewares'
 import {
   accessTokenValidator,
   emailVerifyTokenValidator,
   forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
+  resetPasswordValidator,
   resgisterValidator,
+  updateMeValidator,
+  verifiedUserValidator,
   verifyForgotPasswordTokenValidator
 } from '~/middlewares/user.middlewares'
+import { UpdateMeReqBody } from '~/models/requests/user.request'
 import { wrapAsync } from '~/utils/handlers'
 const usersRouter = Router() // lưu hết tất cả các tính năngb liên quan đến user
 // thằng naỳ là middleware(midlewware thì có 3 cái)
@@ -36,7 +45,7 @@ path: /users/register
 method: POST
 body: {email, password}
 */
-usersRouter.get('/login', loginValidator, wrapAsync(loginControler))
+usersRouter.post('/login', loginValidator, wrapAsync(loginControler))
 
 // đây là cái mà mấy lập trình viên hay sài để cho ngươi ta viết mình viết
 // cái gì
@@ -143,4 +152,82 @@ usersRouter.post(
   verifyForgotPasswordTokenValidator,
   wrapAsync(verifyForgotPasswordTokenController)
 )
+
+//-------------------------------------------------------
+//Buổi 31
+/*
+des: reset password
+path: '/reset-password'
+method: POST, vì mình chỉ đưa lên chứ mình kh có lấy(GET)
+Header: không cần, vì  ngta quên mật khẩu rồi, thì sao mà đăng nhập để có authen đc
+body: {forgot_password_token: string, password: string, confirm_password: string}
+*/
+
+//verifyForgotPasswordTokenValidator : thằng này đã có ở trên gòi
+// mình chỉ cần đem xuống mà sử dụng để check ForgotPassWord Token
+// còn thằng resetPassWord được dùng để check passWord và confirmed Password
+usersRouter.post(
+  '/reset-password',
+  resetPasswordValidator,
+  verifyForgotPasswordTokenValidator,
+  wrapAsync(resetPasswordController)
+)
+
+/*
+ des: reset password
+path: '/reset-password'
+method: POST
+Header: không cần, vì  ngta quên mật khẩu rồi, thì sao mà đăng nhập để có authen đc
+body: {forgot_password_token: string, password: string, confirm_password: string}
+*/
+usersRouter.post('/reset-password', resetPasswordValidator, wrapAsync(resetPasswordController))
+
+/*
+Khi nào dùng tính năng này, khi mà đăng nhập, 
+có accessToken thì mới sử dụng được
+
+des: get profile của user
+path: '/me'
+method: get
+Header: {Authorization: Bearer <access_token>}
+body: {}
+*/
+usersRouter.get('/me', accessTokenValidator, wrapAsync(getMeController))
+
+// Put và patch thì cả 2 thằng dùng để cập nhật
+// Put và patch nào ngonn hơn?
+/*
+  +Put: thì muốn  cập nhật nhiu thì phải đưa hết, 
+    ví dụ mún cập nhật 2 mà thuộc tính có tới 5 thì mình phải đưa đến 5
+
+    // Patch ngon hơn
+   +Patch thì cập nhật nhiu đưa nhiêu 
+*/
+//verifiedUserValidator : check coi email verify chưa
+usersRouter.patch(
+  '/me',
+  accessTokenValidator,
+  verifiedUserValidator,
+  filterMiddleware<UpdateMeReqBody>([
+    'name',
+    'date_of_birth',
+    'bio',
+    'location',
+    'website',
+    'avatar',
+    'username',
+    'cover_photo'
+  ]),
+  updateMeValidator,
+  wrapAsync(updateMeController)
+)
+
+/*
+des: get profile của user khác bằng unsername
+path: '/:username'
+method: get
+không cần header vì, chưa đăng nhập cũng có thể xem (param)
+*/
+usersRouter.get('/:username', wrapAsync(getProfileController))
+//chưa có controller getProfileController, nên bây giờ ta làm
 export default usersRouter

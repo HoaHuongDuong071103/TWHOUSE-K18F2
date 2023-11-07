@@ -1,9 +1,12 @@
 // Controller
-import { Request, Response } from 'express'
+import { NextFunction, Request, Response } from 'express'
 import usersService from '~/services/users.services'
 import { ParamsDictionary } from 'express-serve-static-core'
 import {
+  GetProfileReqParams,
+  ResetPassowrdReqBody,
   TokenPayLoad,
+  UpdateMeReqBody,
   VerifyEmailReqBody,
   loginReqBody,
   logoutReqBody,
@@ -17,10 +20,12 @@ import { ErrorWithStatus } from '~/models/Errors'
 import HTTP_STATUS from '~/constants/httpStatus'
 
 import { UserVerifyStatus } from '~/constants/enum'
+import { checkSchema } from 'express-validator'
 // check đăng nhập
 export const loginControler = async (req: Request<ParamsDictionary, any, loginReqBody>, res: Response) => {
   // lấy user_id từ user của req (nãy gửi đó )
-  const user = req.user as User // lúc này, đã định nghĩa gòi (video 29)
+  // chỗ này cũng có thể sử dụng distruct để lấy các phần tử verify
+  const user = req.user as User // lúc này, đã định nghĩa gòi (video 29), từ thằng này mình có thể lấy được cái verify nè
   const user_id = user._id as ObjectId // đây là đối tượng trên Môngo , đây là đối tượng id
 
   //---------------------------------------------------------------
@@ -30,7 +35,7 @@ export const loginControler = async (req: Request<ParamsDictionary, any, loginRe
   // nên là muôn sử dụng cái hàm login này thì phải dùng toString để biến
   // đối tượng thành chuỗi mới sử dụng được không là PUG
 
-  const result = await usersService.login(user_id.toString()) // login dùng tạo acc và refresh
+  const result = await usersService.login({ user_id: user_id.toString(), verify: user.verify }) // login dùng tạo acc và refresh
 
   // vì kí access và refresh thì mình cần phải đưa cái userID thì mới kí đc
   // res về access_token và refresh_token cho  client
@@ -125,6 +130,7 @@ export const emailVerifyTokenController = async (
   })
 }
 
+//---------------------------------------------------------
 // Quên mk (Buổi 30)
 // do cái này nó kh có body mà nó chỉ có cái header thôi nên mình kh cânf đnhj nghĩa nó
 export const resendEmailVerifyController = async (req: Request, res: Response) => {
@@ -172,11 +178,11 @@ export const forgotPasswordController = async (req: Request, res: Response) => {
   // lấy user_id từ user của req
   // đến được đây là biết bạn là ai gòi, nên chỉ cần cầm cái _id này
   // cập nhật cái forgot password cho bạn
-  const { _id } = req.user as User
+  const { _id, verify } = req.user as User
   // dùng _id tìm va cập nhật lại user thêm vào forgot_password_token
   // _id có thể là undefined nên mình đinhj nghĩa là obj
   // gòi ép kiểu thành string
-  const result = await usersService.forgotPassword((_id as ObjectId).toString())
+  const result = await usersService.forgotPassword({ user_id: (_id as ObjectId).toString(), verify })
   return res.json(result)
 }
 
@@ -186,3 +192,58 @@ export const verifyForgotPasswordTokenController = async (req: Request, res: Res
     message: USERS_MESSAGES.VERIFY_FORGOT_PASSWORD_TOKEN_SUCCESS
   })
 }
+
+// khi làm có thằng Req, thì khoan hã định nghĩa
+// thì khi nào trong lúc làm mà có dính dáng tới param ha body
+// thì hã định nghĩa
+export const resetPasswordController = async (
+  req: Request<ParamsDictionary, any, ResetPassowrdReqBody>,
+  res: Response
+) => {
+  //muốn đổi mk thì cần user_id và password mới
+  // user_id này lấy ở đâu?
+  // mình sẽ ở thằng verifyForgotPasswordTokenController
+  // bởi vì từ thằng này decode ra cái verify đó, thì chắc chắn
+  // trong đâý có user_id
+  const { user_id } = req.decoded_forgot_password_token as TokenPayLoad
+  const { password } = req.body //  lấy trong body, do mình đã sử dụng body
+  //                              để lấy password nên mình phải định nghĩa nó
+
+  // cập nhật
+  const result = await usersService.resetPassword({ user_id, password })
+  return res.json(result)
+}
+
+export const getMeController = async (req: Request, res: Response) => {
+  // mún lấy profile của mình thì có user_id mình
+  const { user_id } = req.decode_authorization as TokenPayLoad
+  const user = await usersService.getMe(user_id)
+  return res.json({
+    message: USERS_MESSAGES.GET_ME_SUCCESS,
+    result: user
+  })
+}
+
+export const updateMeController = async (req: Request<ParamsDictionary, any, UpdateMeReqBody>, res: Response) => {
+  // muốn update thì cần user_id và các thông tin cần update
+  const { user_id } = req.decode_authorization as TokenPayLoad
+  const { body } = req // body này là nơi chứa thông tin của người dungf nè
+  //update laij usser
+  const result = await usersService.updateMe(user_id, body)
+  return res.json({
+    message: USERS_MESSAGES.UPDATE_ME_SUCCESS,
+    result
+  })
+}
+
+export const getProfileController = async (req: Request<GetProfileReqParams>, res: Response) => {
+  // tìm user theo
+  const { username } = req.params //lấy username từ query params
+  const user = await usersService.getProfile(username)
+  return res.json({
+    message: USERS_MESSAGES.GET_PROFILE_SUCCESS, //message.ts thêm  GET_PROFILE_SUCCESS: 'Get profile success',
+    user
+  })
+}
+//usersService.getProfile(username) nhận vào username tìm và return ra ngoài, hàm này chưa viết
+//giờ ta sẽ viết
