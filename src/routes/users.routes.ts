@@ -1,26 +1,33 @@
 import { Router } from 'express'
 import {
+  changePasswordController,
   emailVerifyTokenController,
+  followController,
   forgotPasswordController,
   getMeController,
   getProfileController,
   loginControler,
   logoutController,
+  refreshTokenController,
   resendEmailVerifyController,
   resetPasswordController,
   resgisterController,
+  unfollowController,
   updateMeController,
   verifyForgotPasswordTokenController
 } from '~/controllers/users.controllers'
 import { filterMiddleware } from '~/middlewares/common.middlewares'
 import {
   accessTokenValidator,
+  changePasswordValidator,
   emailVerifyTokenValidator,
+  followValidator,
   forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
   resetPasswordValidator,
   resgisterValidator,
+  unfollowValidator,
   updateMeValidator,
   verifiedUserValidator,
   verifyForgotPasswordTokenValidator
@@ -230,4 +237,119 @@ không cần header vì, chưa đăng nhập cũng có thể xem (param)
 */
 usersRouter.get('/:username', wrapAsync(getProfileController))
 //chưa có controller getProfileController, nên bây giờ ta làm
+//--------------------------
+
+//--------------------------------------------------------------
+//Buổi32
+// mình kh nên dùng 1 người lưu trữ những người flow
+// vì nó sẽ bị đa trị , và có thể đạt đến kích cỡ 16mb
+/*
+des: Follow someone
+path: '/follow'
+method: post
+headers: {Authorization: Bearer <access_token>} // tại sao phải là truyền  lên token
+//                                                    hệ thống cần biết bạn là ai
+//                                                      bạn là ai bạn mới được follow người khác
+//                                                      và mã của người mà mình follower
+body: {followed_user_id: string} // mã người maf mình mún follow
+*/
+usersRouter.post('/follow', accessTokenValidator, verifiedUserValidator, followValidator, wrapAsync(followController))
+//accessTokenValidator dùng dể kiểm tra xem ngta có đăng nhập hay chưa, và có đc user_id của người dùng từ req.decoded_authorization
+//verifiedUserValidator dùng để kiễm tra xem ngta đã verify email hay chưa, rồi thì mới cho follow người khác
+//trong req.body có followed_user_id  là mã của người mà ngta muốn follow
+//followValidator: kiểm tra followed_user_id truyền lên có đúng định dạng objectId hay không
+//  account đó có tồn tại hay không
+//followController: tiến hành thao tác tạo document vào collection followers
+/*
+   user 32:  6561cb85a1eb3a2063250232
+  user 36: 6561ccdea1eb3a2063250236
+  usser 38: 6561ce79551ce09f39c7bcdb
+ //-------------------Comback nef 
+  "_id": "65782495f88511772fe4627a
+    "_id": "657824d9f88511772fe4627d",
+
+*/
+
+//---------------------------------------------------------
+// Khai báo tính năng unfollow
+// nó cũng chỉ đơn giản là vào db của follower xóa cái thằng mình đã fllow
+/*    
+cái delete không cho truyền qua body nha, nên minhf phải truyền qua param
+      des:Unfollow someone
+      path:'/unfollow/:user_id' 
+      method:delete
+      headers: {Authorization: Bearer <access_token>}
+
+*/
+// chỗ này là unfollow nên là người ta sẽ truyền cho mình cái mã
+// mình cầm cái mã đó check coi cái mã đó có phải là dẫn đến cho chúng ta 1 con người thật không
+usersRouter.delete(
+  '/unfollow/:user_id',
+  accessTokenValidator,
+  verifiedUserValidator,
+  unfollowValidator,
+  wrapAsync(unfollowController)
+)
+
+// chỗ này cần phải xem lại là unfollow bản thân và unfollow người mà mình đã follow (32p -Buổi 32-1)
+
+////---------------------------------------------------------------------------------------
+// change password
+/*
+// muốn đổi mk phải đăng nhập, sau đó nhập mk cũ, gòi mới nhập mk mới
+    des:change password
+    path:'/change-password'
+    method:put
+    headers:{Authorization: Bearer<access_token>}
+
+    body: {old_password:string , new_password:string , confirm_new_password:string}
+  */
+
+// Tại sao lại có old_password thì đơn giản là
+// bạn mún đổi mật khẩu thì bạn phải nhập lại mk cũ
+
+//changePasswordValidator
+/*
+  Thằng này dùng để check cái body nè
+  trong cái body á 
+  old_password:string : có mỗi thằng này là lạ thôi
+  chứ new_password:string , confirm_new_password:string
+  2 thằng này y chang password với confirm password á
+  nên có thể tái sử dụng
+
+*/
+//-------------------------------------------------------------------------------------------
+usersRouter.put(
+  '/change-password',
+  accessTokenValidator,
+  verifiedUserValidator,
+  changePasswordValidator,
+  wrapAsync(changePasswordController)
+)
+
+//--------------------------------
+// đây là gửi cái refresh token khi mà access hết hạn
+/*
+  des: refreshtoken
+  path: '/refresh-token'
+  method: POST
+  Body: {refresh_token: string}
+g}
+//----------------  
+Tại sao không kiêmr tra access_token?
+bởi vì cái access nó đã hết hạn gòi nên mình đâu cần kt nữa
+  */
+// chức năng này Cần phải coi lại  (Buổi 32)
+usersRouter.post('/refresh-token', refreshTokenValidator, wrapAsync(refreshTokenController))
+
+//chức năng này dui nè từng được anh Điệp nhắc tới trong bài JWT
+// Ứng dungj A quỷ quyền cho ứng dụng B để sử dụng account của ứng dụng A
+// I - OAuth2.0
+// OAuth2.0: Open Authorization 2.0
+// là giao thức : Đăng nhập bằng tài khoản Google, Facebook, Github
+// link tạo giao thức nè:https://console.cloud.google.com/getting-started
+
+//  coi video từ chỗ nảy
+// usersRouter.get('/oauth/google', wrapAsync(oAuthController))
+
 export default usersRouter

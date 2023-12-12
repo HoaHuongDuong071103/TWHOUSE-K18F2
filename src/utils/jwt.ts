@@ -24,7 +24,7 @@ export const signToken = ({
 }: {
   payload: string | object | Buffer // định nghĩa thuộc tính từng thuộc tính trong obj
   privateKey: string
-  options: jwt.SignOptions
+  options?: jwt.SignOptions
 }) => {
   // định nghĩa luôn là Prmoise trả ra String
   return new Promise<string>((resolve, reject) => {

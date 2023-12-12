@@ -2,7 +2,7 @@ import { UpdateMeReqBody, resgisterReqBody } from '~/models/requests/user.reques
 import databaseService from './database.services'
 import User from '~/models/schemas/User.schema copy'
 import { hashPassword } from '~/utils/crypto'
-import { signToken } from '~/utils/jwt'
+import { signToken, verifyToken } from '~/utils/jwt'
 import { TokenType, UserVerifyStatus } from '~/constants/enum'
 import usersRouter from '~/routes/users.routes'
 import RefreshToken from '~/models/schemas/RefreshToken.schema'
@@ -10,6 +10,7 @@ import { ObjectId } from 'mongodb'
 import { USERS_MESSAGES } from '~/constants/messages'
 import { ErrorWithStatus } from '~/models/Errors'
 import HTTP_STATUS from '~/constants/httpStatus'
+import { Follower } from '~/models/schemas/Follow.Schema'
 //Service
 //Database: là vùng để kết nối với nhau chứ không dùng để xử lý,
 //vậy nên mới cần cái thằng Service truy xuất dữ liệu  Controller sẽ
@@ -30,12 +31,19 @@ class UsersService {
     })
   }
   // hàm nhận vào user_id và bỏ vào payLoad để tạo RefreshToken
-  private signRefreshToken({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
-    return signToken({
-      payload: { user_id, token_type: TokenType.RefreshToken, verify },
-      options: { expiresIn: process.env.REFRESH_TOKEN_EXPIRE_IN },
-      privateKey: process.env.JWT_SECRET_REFRESH_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
-    })
+  private signRefreshToken({ user_id, verify, exp }: { user_id: string; verify: UserVerifyStatus; exp?: number }) {
+    if (exp) {
+      return signToken({
+        payload: { user_id, token_type: TokenType.RefreshToken, verify, exp },
+        privateKey: process.env.JWT_SECRET_REFRESH_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
+      })
+    } else {
+      return signToken({
+        payload: { user_id, token_type: TokenType.RefreshToken, verify },
+        options: { expiresIn: process.env.REFRESH_TOKEN_EXPIRE_IN },
+        privateKey: process.env.JWT_SECRET_REFRESH_TOKEN as string // lúc đầu thằng này ở bên signToken nó là option
+      })
+    }
   }
 
   // hàm sign Email_verify_Token
@@ -61,6 +69,14 @@ class UsersService {
     //                                    chỗ này nhận vào obj nè                      đây cũng thế
     return Promise.all([this.signAcessToken({ user_id, verify }), this.signRefreshToken({ user_id, verify })])
   }
+
+  private decodeRefreshToken(refresh_token: string) {
+    return verifyToken({
+      token: refresh_token,
+      secretOrPublicKey: process.env.JWT_SECRET_REFRESH_TOKEN as string
+    })
+  }
+
   //----------------------------------------------------------
   // checkEmail có tồn tại chưa
   async checkEmailExist(email: string) {
@@ -129,6 +145,7 @@ class UsersService {
       user_id: user_id.toString(),
       verify: UserVerifyStatus.Unverified // chôx này cũng z ljun
     })
+    const { exp, iat } = await this.decodeRefreshToken(refresh_token)
     // ---------------------------------------------------
     // kí xong thì lưu lại trong db để bảo mật nè
     // nhớ là chỉ lưu Refresh
@@ -138,8 +155,10 @@ class UsersService {
     // insert nó là promise nên phải await
     await databaseService.refreshTokens.insertOne(
       new RefreshToken({
+        user_id: new ObjectId(user_id),
         token: refresh_token,
-        user_id: new ObjectId(user_id)
+        exp,
+        iat
       })
     )
     //-----------------------------------------------------
@@ -162,12 +181,14 @@ class UsersService {
   async login({ user_id, verify }: { user_id: string; verify: UserVerifyStatus }) {
     // dùng user_id tạo access và refresh
     const [access_token, refresh_token] = await this.signAcessAndRefreshToken({ user_id, verify })
-
+    const { exp, iat } = await this.decodeRefreshToken(refresh_token)
     // lưu refresh_token và db
     await databaseService.refreshTokens.insertOne(
       new RefreshToken({
         token: refresh_token,
-        user_id: new ObjectId(user_id)
+        user_id: new ObjectId(user_id),
+        exp,
+        iat
       })
     )
     // mình trả cho người dùng obj
@@ -206,14 +227,17 @@ class UsersService {
       verify: UserVerifyStatus.Verified // tại sao lại là verify laf bởi vì đây là cái hàm
       //                chuyển từ unverfied sang verify nên chỗ này phải là verify
     })
+    const { exp, iat } = await this.decodeRefreshToken(refresh_token)
     // lưu refresh vào db
     // tại vì cái collection của refreshTokens này chỉ có 2 thuộc tính à
     // token và người xở hữu
     await databaseService.refreshTokens.insertOne(
       new RefreshToken({
         token: refresh_token,
-        user_id: new ObjectId(user_id) // tại sao  lại là ObjId vì mình truyền dô là chuỗi
+        user_id: new ObjectId(user_id), // tại sao  lại là ObjId vì mình truyền dô là chuỗi
         //                             mà lưu lên server là obj nên phải ép kiểu
+        exp,
+        iat
       })
     )
     return { access_token, refresh_token }
@@ -352,6 +376,108 @@ class UsersService {
     }
     // nếu kh vào if thì nó ngonn return ra cho sài
     return user
+  }
+
+  async follow(user_id: string, followed_user_id: string) {
+    // kiểm tra xem là đã follow chưa
+    const isFollowed = await databaseService.followers.findOne({
+      // tạo ra đối tượng
+      user_id: new ObjectId(user_id),
+      followed_user_id: new ObjectId(followed_user_id)
+    })
+    // nếu đã follow  rồi thì return message là đã floow
+    if (isFollowed !== null) {
+      return {
+        message: USERS_MESSAGES.FOLLOWED
+      }
+    }
+    await databaseService.followers.insertOne(
+      new Follower({
+        user_id: new ObjectId(user_id),
+        followed_user_id: new ObjectId(followed_user_id)
+      })
+    )
+    return {
+      message: USERS_MESSAGES.FOLLOW_SUCCESS
+    }
+  }
+
+  // XÓA UNFOLLOW
+  async unfollow(user_id: string, followed_user_id: string) {
+    // kiểm tra xem đã follow chưa
+    const isFollowed = await databaseService.followers.findOne({
+      user_id: new ObjectId(user_id),
+      followed_user_id: new ObjectId(followed_user_id)
+    })
+
+    // nếu chưa folllow  thì return mess là đã unfollow rồi
+    if (!isFollowed) {
+      return { message: USERS_MESSAGES.ALREADY_UNFOLLOWED }
+    }
+
+    // nếu chưa folllow thì xuốn đây
+    //  truy cập dô db xóa cái đói tượngd dó
+    const result = await databaseService.followers.deleteOne({
+      user_id: new ObjectId(user_id),
+      followed_user_id: new ObjectId(followed_user_id)
+    })
+
+    // thành công gồi thì thông báo
+    return { message: USERS_MESSAGES.UNFOLLOW_SUCCESS }
+  }
+
+  async changePassWord(user_id: string, password: string) {
+    // tìm user thông qua user_id
+    // cập nhật lại password và forgot_passWord_token
+    await databaseService.users.updateOne({ _id: new ObjectId(user_id) }, [
+      {
+        $set: {
+          // nên lưu password dạng mã hash nha
+          password: hashPassword(password),
+          // chỉnh sửa lại nè
+          forgot_password_token: '',
+          update_at: '$$NOW'
+        }
+      }
+    ])
+    // nếu mà bạn ở đây chỉ muốn người ta đổi xong thì phải đăng nhập lại
+    // bằng cách trả về access và refresh
+    // ở đây mình chỉ cho người ta đổi mk thôi, nên trả về message
+    return {
+      message: USERS_MESSAGES.CHANG_PASSWORD_SUCCESS
+    }
+  }
+
+  async refreshToken({
+    user_id,
+    verify,
+    refresh_token,
+    exp
+  }: {
+    user_id: string
+    verify: UserVerifyStatus
+    refresh_token: string
+    exp: number
+  }) {
+    // tạo mới nè
+    const [new_access_token, new_refersh_token] = await Promise.all([
+      this.signAcessToken({ user_id, verify }),
+      this.signRefreshToken({ user_id, verify, exp })
+    ])
+    // sau khi mà mình tạo xong thì mình xóa cái cũ
+    // mình chỉ cần dô db xóa tìm gòi xóa
+    // Vì 1  người có thể đăng nhập nhiều nơi khác nhau, nên họ sẽ có rất nhiều document trong collection
+    // ta không thể dùng user_id tìm document cần update, mà phải dùng token , đọc trong RefreshToken.schema.ts
+    await databaseService.refreshTokens.deleteOne({ token: refresh_token })
+    //insert lại document mới
+    // tìm ở cái user_id này, và thêm cái refershToken mới
+
+    // này là ngày cấp
+    const { iat } = await this.decodeRefreshToken(refresh_token)
+    await databaseService.refreshTokens.insertOne(
+      new RefreshToken({ user_id: new ObjectId(user_id), token: new_refersh_token, exp, iat })
+    )
+    return { access_token: new_access_token, refresh_token: new_refersh_token }
   }
 }
 

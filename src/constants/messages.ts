@@ -60,5 +60,14 @@ export const USERS_MESSAGES = {
   USERNAME_LENGTH_MUST_BE_LESS_THAN_50: 'User name length must be less than 50',
   LOCATION_MUST_BE_A_STRING: 'Location must be a string',
   UPDATE_ME_SUCCESS: 'Update me success',
-  GET_PROFILE_SUCCESS: 'Get profile success'
+  GET_PROFILE_SUCCESS: 'Get profile success',
+  INVALID_USER_ID: 'Invalid user id',
+  FOLLOWED: 'Followed',
+  FOLLOW_SUCCESS: 'Follow success',
+  ALREADY_UNFOLLOWED: 'Already unfollowed',
+  UNFOLLOW_SUCCESS: 'Unfollow success',
+  OLD_PASSWORD_NOT_MATCH: 'Old password not match',
+  CHANG_PASSWORD_SUCCESS: 'Chang password success',
+
+  REFRESH_TOKEN_SUCCESS: 'Refresh token success'
 } as const //để k ai chỉnh đc

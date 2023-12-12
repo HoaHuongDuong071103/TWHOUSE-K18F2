@@ -273,6 +273,7 @@ export const accessTokenValidator = validate(
                 status: HTTP_STATUS.UNAUTHORIZED // 401
               })
             }
+
             try {
               // nếu có asscess thì mình phải verify(check coi phải của mình hong) cái accessToken
               const decoded_authorization = await verifyToken({
@@ -543,12 +544,11 @@ export const verifiedUserValidator = (req: Request, res: Response, next: NextFun
     // nhưng dùng throw thì nó hơi thô
     // với lại throw thì được sử dụng trong chẹck validate thôi
     // nên là chỗ naỳ mình next lun
-    return next(
-      new ErrorWithStatus({
-        message: USERS_MESSAGES.USER_NOT_VERIFIED,
-        status: HTTP_STATUS.FORBIDDEN // 403
-      })
-    )
+
+    throw new ErrorWithStatus({
+      message: USERS_MESSAGES.USER_NOT_VERIFIED,
+      status: HTTP_STATUS.FORBIDDEN // 403
+    })
   }
   next()
 }
@@ -631,6 +631,99 @@ export const updateMeValidator = validate(
       },
       avatar: imageSchema,
       cover_photo: imageSchema
+    },
+    ['body']
+  )
+)
+
+// cái này dùng để check người mình flow có hợp lệ hong
+const userIdSchema: ParamSchema = {
+  custom: {
+    options: async (value: string, { req }) => {
+      // này là của thằng môngo nó sẽ hỗ trợ mình
+      // ê thằng  thằng value mà truyền lên á
+      // có hợp lệ hong
+      // có thì quằng ra true nhưng !nên thành false
+      // nên khỏi chạy và sai thì ngược lại
+      if (!ObjectId.isValid(value)) {
+        throw new ErrorWithStatus({
+          message: USERS_MESSAGES.INVALID_USER_ID,
+          status: HTTP_STATUS.NOT_FOUND
+        })
+      }
+      // biến đổi tên thàng user lun cho phù hợps
+      const user = await databaseService.users.findOne({
+        _id: new ObjectId(value)
+      })
+      if (user === null) {
+        throw new ErrorWithStatus({
+          message: USERS_MESSAGES.USER_NOT_FOUND,
+          status: HTTP_STATUS.NOT_FOUND
+        })
+      }
+      return true
+    }
+  }
+}
+
+export const followValidator = validate(checkSchema({ followed_user_id: userIdSchema }, ['body']))
+
+// thằng này dùng để check parame
+// và unfollowValidator
+export const unfollowValidator = validate(
+  checkSchema(
+    {
+      user_id: userIdSchema
+    },
+    ['params']
+  )
+)
+
+export const changePasswordValidator = validate(
+  checkSchema(
+    {
+      old_password: {
+        ...passwordSchema,
+        custom: {
+          options: async (value, { req }) => {
+            // sau khi qua accessToken thì ta đã có req.decode_authorization
+            // lấy user_id đó để tì user
+            const { user_id } = req.decode_authorization as TokenPayLoad
+            // tạo đối tượng dựa trên cái user_id nếu tìm thấy
+            const user = await databaseService.users.findOne({
+              _id: new ObjectId(user_id)
+            })
+            // nếu user kh tồn tại thì throw lun
+            if (!user) {
+              throw new ErrorWithStatus({
+                message: USERS_MESSAGES.USER_NOT_FOUND,
+                status: HTTP_STATUS.UNAUTHORIZED
+              })
+            }
+            // nếu có user thì kiểm tra xem password có đúng không
+            const { password } = user
+            //mật khẩu có khớp không
+            // nếu mà password cuả người dungf khác với
+            //hashPassword(user) đó thù cút, oke thì return true
+            // Value này là old password á
+            if (password !== hashPassword(value)) {
+              throw new ErrorWithStatus({
+                message: USERS_MESSAGES.OLD_PASSWORD_NOT_MATCH,
+                status: HTTP_STATUS.UNAUTHORIZED // 401
+              })
+            }
+            // nếu mà hợp ly
+            return true
+          }
+        }
+      },
+      /*
+          Tại sao phải là password mà kh phải là newPassword
+          bởi vì trong confirmPassword: có cái thằng dựa trên password để check
+          nếu mà đặt newPassword thì nó tì hong ra
+      */
+      password: passwordSchema,
+      confirm_password: confirmPassWordSchema
     },
     ['body']
   )

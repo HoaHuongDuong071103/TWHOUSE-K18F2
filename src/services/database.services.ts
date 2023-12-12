@@ -6,6 +6,7 @@ import { MongoClient, ServerApiVersion, Db, Collection } from 'mongodb'
 import { config } from 'dotenv' // sử dụng lại 2 cái biến đó nè
 import User from '~/models/schemas/User.schema copy'
 import RefreshToken from '~/models/schemas/RefreshToken.schema'
+import { Follower } from '~/models/schemas/Follow.Schema'
 
 config()
 // taij sao lại có 2 biến do là mình đã để nó ở 1 nơi khác tăng tính bảo mật
@@ -59,6 +60,11 @@ class DatabaseService {
 
   get refreshTokens(): Collection<RefreshToken> {
     return this.db.collection(process.env.DB_REFRESH_TOKEN_COLLECTION as string) // truy cập dô thằng cái collection trong db nè
+  }
+
+  // nó sẽ giúp cho mình cái collection follower
+  get followers(): Collection<Follower> {
+    return this.db.collection(process.env.DB_FOLLOWERS_COLLECTION as string)
   }
 }
 

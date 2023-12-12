@@ -3,9 +3,13 @@ import { NextFunction, Request, Response } from 'express'
 import usersService from '~/services/users.services'
 import { ParamsDictionary } from 'express-serve-static-core'
 import {
+  ChanePasswordReqBody,
+  FollowReqBody,
   GetProfileReqParams,
+  RefreshTokenReqBody,
   ResetPassowrdReqBody,
   TokenPayLoad,
+  UnfollowReqParams,
   UpdateMeReqBody,
   VerifyEmailReqBody,
   loginReqBody,
@@ -20,7 +24,7 @@ import { ErrorWithStatus } from '~/models/Errors'
 import HTTP_STATUS from '~/constants/httpStatus'
 
 import { UserVerifyStatus } from '~/constants/enum'
-import { checkSchema } from 'express-validator'
+
 // check đăng nhập
 export const loginControler = async (req: Request<ParamsDictionary, any, loginReqBody>, res: Response) => {
   // lấy user_id từ user của req (nãy gửi đó )
@@ -245,5 +249,74 @@ export const getProfileController = async (req: Request<GetProfileReqParams>, re
     user
   })
 }
+// buổi 32
 //usersService.getProfile(username) nhận vào username tìm và return ra ngoài, hàm này chưa viết
 //giờ ta sẽ viết
+export const followController = async (
+  req: Request<ParamsDictionary, any, FollowReqBody>,
+  res: Response,
+  next: NextFunction
+) => {
+  // ở đây là mình lấy được cái user_id từ cái decode này bởi vì nó được nằm trong header
+  const { user_id } = req.decode_authorization as TokenPayLoad
+  // và cái followed_user_id này được lấy trong body
+  const { followed_user_id } = req.body
+  /*
+      Tại sao phải lấy 2 thằng này?
+      Vì bạn follow ai thì trước tiên tui phải biết bạn là ai, sau đó bạn mún follow ai
+      thì chỉ cần đưa tui cái followed_user_id (người mà bạn muốn follow)
+  
+  */
+
+  const result = await usersService.follow(user_id, followed_user_id)
+  return res.json(result)
+}
+
+export const unfollowController = async (req: Request<UnfollowReqParams>, res: Response, next: NextFunction) => {
+  // lấy user_id từ người dùng thực hiện hành động unfoloo
+  const { user_id } = req.decode_authorization as TokenPayLoad // lấy user_id từ decode_authorization của accessTokebn
+
+  // đây là người dùng minhf unfollowed
+  //đây là mình sử dụng param nên mình phải đinhj nghĩa nó lại
+  const { user_id: followed_user_id } = req.params
+  const result = await usersService.unfollow(user_id, followed_user_id) //
+  return res.json(result)
+}
+
+// chỗ này uốn đổi mk. thì mình phải biết mình là ai
+// và cái password mới mà mình muốn
+export const changePasswordController = async (
+  req: Request<ParamsDictionary, any, ChanePasswordReqBody>,
+  res: Response
+) => {
+  // lấy user_id từ decode_author
+  const { user_id } = req.decode_authorization as TokenPayLoad
+  // chỗ này đã đụng đến body nên là phải định nghĩa lại
+  const { password } = req.body
+
+  // ở đây mình có cái tầng service  này có thể thay đổi password dựa trên cái id tương ứng
+  const result = await usersService.changePassWord(user_id, password)
+  return res.json(result)
+}
+
+export const refreshTokenController = async (
+  // mà nó là body nên nó ở vị trí thứ 3
+  req: Request<ParamsDictionary, any, RefreshTokenReqBody>,
+  res: Response
+) => {
+  // mình cần thêm cái verify và user_id nữa và mình sẽ dúng 2 thằng để tạo aceess và refresh
+  // cần mã và trạng thái của cái account đó
+  // khi qua middleware refreshTokenValidator thì ta đã có decoded_refresh_token
+  //chứa user_id và token_type
+  //ta sẽ lấy user_id để tạo ra access_token và refresh_token mới
+  const { user_id, verify, exp } = req.decode_refresh_token as TokenPayLoad
+  //  cái này được dùng để tìm cái document mói mà xóa
+  const { refresh_token } = req.body
+
+  //  dô đây là ký refresh nef
+  const result = await usersService.refreshToken({ user_id, verify, refresh_token, exp })
+  return res.json({
+    message: USERS_MESSAGES.REFRESH_TOKEN_SUCCESS,
+    result
+  })
+}

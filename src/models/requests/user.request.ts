@@ -2,7 +2,7 @@
 
 import { JwtPayload } from 'jsonwebtoken'
 import { TokenType, UserVerifyStatus } from '~/constants/enum'
-
+import { ParamsDictionary } from 'express-serve-static-core'
 // tại sao toàn là String không vậy là do
 // người dùng đưa lên cho mình toàn là chuỗi hong à
 export interface resgisterReqBody {
@@ -28,6 +28,8 @@ export interface TokenPayLoad extends JwtPayload {
   user_id: string
   token_type: TokenType
   verify: UserVerifyStatus // chỗ này định nghĩa lại èn (Buổi 31(video chữa tắt tiếng (1p cuối)))
+  exp: number
+  iat: number
 }
 
 export interface VerifyEmailReqBody {
@@ -52,6 +54,27 @@ export interface UpdateMeReqBody {
   cover_photo?: string
 }
 
-export interface GetProfileReqParams {
+export interface GetProfileReqParams extends ParamsDictionary {
   username: string
+}
+
+export interface FollowReqBody {
+  followed_user_id: string
+}
+
+// do đây là param nên mình dùng extends để định nghĩa nó (param)
+// nếu mà sử dụng cho query thì định nghĩa nó nghen
+export interface UnfollowReqParams extends ParamsDictionary {
+  user_id: string
+}
+
+export interface ChanePasswordReqBody {
+  old_password: string
+  // thằng này password mới nè
+  password: string
+  confirm_password: string
+}
+
+export interface RefreshTokenReqBody {
+  refresh_token: string
 }
